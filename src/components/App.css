@@ -1,0 +1,234 @@
+*, *::before, *::after{
+  box-sizing: border-box;
+}
+
+/* Body / Page layout */
+body{
+  margin: 0;
+  display: flex; 
+  flex-direction: column; 
+  min-height: 100vh; 
+  background-color: #ECFAE5; 
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #2f3835;
+}
+
+/* Top toolbar (nav) */
+.toolbar {
+  display: flex;
+  flex-direction: row;
+  justify-content: center; 
+  width: 100%;
+  background-color: #D1D8BE;
+  border-bottom: 3px solid #eaedc7;
+  align-items: center;
+  gap: 0;
+  z-index: 10;
+}
+
+/* toolbar links */
+.toolbar a {
+  cursor: pointer;
+  font-size: 18px;
+  color: #2f3835;
+  font-weight: bold;
+  background-color: #D1D8BE;
+  transition: background-color 100ms;
+  text-decoration: none;
+  padding: 1.25rem 1.75rem;
+  border-right: 2px solid #eaedc7; 
+}
+.toolbar a:last-child { 
+  border-right: none; 
+}
+.toolbar a:hover { 
+  background-color: #A7C1A8; 
+}
+
+/* Top controls row (UPLOAD / CLEAR / BACK / RESET) */
+.top-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 16px;
+  background: transparent;
+  width: 100%;
+}
+
+/* general button styles */
+.btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #bfc9b3;
+  background: #b9d9b7;
+  cursor: pointer;
+  font-weight: 600;
+  color: #2f3835;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn:hover {
+  background-color: #A7C1A8; 
+}
+.btn-reset {
+  background: #ffecec;
+  border-color: #f2b1b1;
+}
+
+/* Page main container uses grid */
+.container{
+  display: grid;
+  grid-template-columns: 1fr 320px; /* main image + sidebar */
+  grid-template-rows: 1fr auto; /* 1fr для image, auto для slider */
+  grid-template-areas: 
+    "image sidebar"
+    "slider sidebar";
+  gap: 0;
+  height: calc(100vh - 120px); /* reserve for toolbar + controls */
+  width: 100%;
+}
+
+/* Main image area */
+.main-image {
+  grid-area: image;
+  width: 100%;
+  height: 100%;
+  margin: 20px; /* зовнішній відступ навколо контейнера */
+  background-position: center;
+  background-size: 80%;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.main-image .image-preview {
+  max-width: 90%;  /* <-- зменшуємо ширину до 90% контейнера */
+  max-height: 90%; /* <-- зменшуємо висоту до 90% контейнера */
+  object-fit: contain; /* зберігає пропорції */
+  display: block;
+}
+
+
+/* Placeholder text inside main-image */
+.placeholder {
+  color: #666;
+  font-weight: 600;
+}
+
+/* Sidebar on the right */
+.sidebar{
+  grid-area: sidebar;
+  background-color: #EEEFE0;
+  border-left: 3px solid #eaedc7;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 12px;
+  gap: 8px;
+  min-width: 220px;
+}
+
+/* Individual sidebar option button */
+.sidebar-item{
+  cursor: pointer;
+  border: none;
+  outline: none;
+  font-size: 18px;
+  font-weight: bold;
+  color: #2f3835;
+  background-color: #D1D8BE;
+  padding: 1.25rem;
+  position: relative;
+  transition: background-color 120ms, transform 80ms;
+  text-align: left;
+}
+.sidebar-item:hover, .sidebar-item:focus{
+  background-color: #A7C1A8;
+  transform: translateY(-1px);
+}
+.sidebar-item.active{
+  background-color: #819A91;
+}
+.sidebar-item::after{
+  content:'';
+  position:absolute;
+  width: 100%;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background-color:#eaedc7;
+}
+.sidebar-item:last-child::after{
+  display:none;
+}
+
+/* Slider area */
+.slider-container {
+  grid-area: slider;
+  margin-bottom: 4rem; /* прибираємо верхній відступ */
+  padding: 2rem; /* або менше, за бажанням */
+}
+
+
+/* Range input styles */
+.slider{
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  height: 6px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,#bfc9b3,#dde6d1);
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #8aa18a;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+.slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #8aa18a;
+}
+
+/* Upload controls inside sidebar (if used) */
+.upload-controls {
+  display:flex;
+  gap:8px;
+  margin-bottom:8px;
+  flex-wrap: wrap;
+}
+
+/* Responsive behaviour */
+@media (max-width: 900px) {
+  .container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "image"
+      "sidebar"
+      "slider";
+    height: auto;
+    padding-bottom: 40px;
+    gap: 12px;
+  }
+  .main-image { margin: 12px; height: 50vh; background-size: cover; }
+  .sidebar { min-width: auto; padding: 8px; }
+  .toolbar a { padding: 1rem; font-size: 16px; }
+  .top-controls { padding: 8px; gap: 6px; }
+}
+
+/* Small utility */
+.hidden { display: none; }
