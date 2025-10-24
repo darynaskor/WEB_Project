@@ -1,16 +1,62 @@
-# React + Vite
+# WEB_Project
+# Movie Poster Manager: Асинхронний Сервіс Керування Постерами Фільмів
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Опис проєкту
+**Movie Poster Manager** — це веб-застосунок, який демонструє архітектуру для ефективного виконання **трудомістких асинхронних завдань** у середовищі веб-сервісів.  
+Основна функція системи — **завантаження, обробка та збереження постерів фільмів** із зовнішніх API у фоновому режимі з відстеженням прогресу та балансуванням навантаження між кількома серверами застосунку.
+---
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Вимоги
 
-## React Compiler
+### Обмеження
+1. Максимальна кількість одночасних завантажень постерів — 5
+2. Час обробки - ≤ 30 секунд на клієнті та сервері
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+### Хід виконання задачі (приклад — планування сеансів)
+1. **10%** — підготовка
+2. **50%** — завантаження
+4. **90%** — збереження результатів
+5. **100%** — готово 
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+### Історія задач
+Зберігається інформація про:
+- назву фільму 
+- статус (queued, in progress, done, error, canceled)
+- результат 
+- час створення
+- 
+---
+
+###Користувач може:
+- Переглядати стан кожного завдання
+- Запускати нові
+- Скасовувати активні
+
+---
+
+### Авторизація
+- Логін / Реєстрація  
+- Кожен користувач має **власну** історію завантажень та колекцію збережених постерів
+- Всі запити виконуються через **HTTPS**
+  
+
+---
+
+### Профіль користувача
+- Персональна інформація (ім’я, email)  
+- Список обраних фільмів
+- Перегляд історію завантажень та колекцію збережених постерів
+
+---
+
+### Балансування навантаження
+- Використання Nginx / HAProxy як load balancer
+- Мінімум 2 application servers
+- Спільна база даних для збереження користувацьких даних
+- Якщо один сервер виходить із ладу — інший продовжує обробку задач
+     
