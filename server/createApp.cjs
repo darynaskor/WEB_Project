@@ -36,6 +36,7 @@ function createApp(options = {}) {
     tokenExpiry = process.env.JWT_EXPIRES_IN || '2h',
     maxActiveTasks = Number(process.env.MAX_ACTIVE_TASKS || 5),
     maxTasksStored = Number(process.env.MAX_TASKS_STORED || 100),
+    averageTaskSeconds = Number(process.env.AVERAGE_TASK_SECONDS || 15),
     serverId = process.env.APP_SERVER_ID || 'app-1',
   } = options;
 
@@ -159,12 +160,14 @@ function createApp(options = {}) {
     }
 
     const activeCountStmt = db.prepare(`
-      SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('running', 'pending') AND user_id = ?
+      SELECT COUNT(*) as cnt FROM tasks WHERE status = 'running' AND user_id = ?
     `);
-    const { cnt } = activeCountStmt.get(req.user.id);
-    if (cnt >= maxActiveTasks) {
-      return res.status(409).json({ error: `Досягнуто максимум активних задач (${maxActiveTasks}).` });
-    }
+    const { cnt: activeCount } = activeCountStmt.get(req.user.id);
+
+    const queueCountStmt = db.prepare(`
+      SELECT COUNT(*) as cnt FROM tasks WHERE status = 'queued' AND user_id = ?
+    `);
+    const { cnt: queuedCount } = queueCountStmt.get(req.user.id);
 
     const now = new Date().toISOString();
     const insertStmt = db.prepare(`
@@ -172,8 +175,20 @@ function createApp(options = {}) {
       VALUES (@status, @progress, @complexity, @filters, @imageName, @resultSummary, @resultData, @errorMessage, @createdAt, @updatedAt, @userId)
     `);
 
+    let status = 'running';
+    let httpStatus = 201;
+    let queuePosition = 0;
+    let estimatedWaitSeconds = 0;
+
+    if (activeCount >= maxActiveTasks) {
+      status = 'queued';
+      httpStatus = 202;
+      queuePosition = queuedCount + 1;
+      estimatedWaitSeconds = Math.max(queuePosition * averageTaskSeconds, averageTaskSeconds);
+    }
+
     const info = insertStmt.run({
-      status: 'running',
+      status,
       progress: 0,
       complexity,
       filters: JSON.stringify(filters),
@@ -192,7 +207,14 @@ function createApp(options = {}) {
       WHERE id = ? AND user_id = ?
     `);
     const task = taskStmt.get(info.lastInsertRowid, req.user.id);
-    res.status(201).json({ task: mapTask(task), serverId });
+    res.status(httpStatus).json({
+      task: mapTask(task),
+      queued: status === 'queued',
+      queuePosition,
+      estimatedWaitSeconds,
+      maxActiveTasks,
+      serverId,
+    });
   });
 
   app.patch('/api/tasks/:id', authenticate, (req, res) => {
@@ -216,9 +238,48 @@ function createApp(options = {}) {
     const nextSummary = typeof resultSummary === 'string' ? resultSummary : existing.result_summary;
     const nextError = typeof errorMessage === 'string' ? errorMessage : existing.error_message;
 
-    const allowedStatuses = new Set(['running', 'completed', 'cancelled', 'failed', 'pending']);
+    const allowedStatuses = new Set(['running', 'completed', 'cancelled', 'failed', 'pending', 'queued']);
     if (!allowedStatuses.has(nextStatus)) {
       return res.status(400).json({ error: 'Некоректний статус задачі.' });
+    }
+
+    if (nextStatus === 'running' && existing.status === 'queued') {
+      const activeCountStmt = db.prepare(`
+        SELECT COUNT(*) as cnt FROM tasks WHERE status = 'running' AND user_id = ? AND id != ?
+      `);
+      const { cnt: activeCount } = activeCountStmt.get(req.user.id, existing.id);
+      if (activeCount >= maxActiveTasks) {
+        const queuedAheadStmt = db.prepare(`
+          SELECT COUNT(*) as cnt FROM tasks
+          WHERE user_id = ? AND status = 'queued' AND created_at < ?
+        `);
+        const { cnt: queuedAhead } = queuedAheadStmt.get(req.user.id, existing.created_at);
+        const queuePosition = queuedAhead + 1;
+        const estimatedWaitSeconds = Math.max(queuePosition * averageTaskSeconds, averageTaskSeconds);
+        return res.status(409).json({
+          error: 'Ще очікуєте у черзі. Спробуйте трохи пізніше.',
+          queuePosition,
+          estimatedWaitSeconds,
+          serverId,
+          task: mapTask(existing),
+        });
+      }
+      const queuedAheadStmt = db.prepare(`
+        SELECT COUNT(*) as cnt FROM tasks
+        WHERE user_id = ? AND status = 'queued' AND created_at < ?
+      `);
+      const { cnt: queuedAhead } = queuedAheadStmt.get(req.user.id, existing.created_at);
+      if (queuedAhead > 0) {
+        const queuePosition = queuedAhead + 1;
+        const estimatedWaitSeconds = Math.max(queuePosition * averageTaskSeconds, averageTaskSeconds);
+        return res.status(409).json({
+          error: 'Перед вами ще є задачі у черзі.',
+          queuePosition,
+          estimatedWaitSeconds,
+          serverId,
+          task: mapTask(existing),
+        });
+      }
     }
 
     const now = new Date().toISOString();

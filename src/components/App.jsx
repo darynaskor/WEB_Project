@@ -86,7 +86,7 @@ function deepCopyOptions(options){
 }
 
 const MAX_HISTORY_ENTRIES = 10;
-const MAX_TASK_COMPLEXITY = 70;
+const MAX_TASK_COMPLEXITY = 70; 
 
 function buildFilterString(optionList) {
   return optionList.map(option => `${option.property}(${option.value}${option.unit})`).join(' ');
@@ -175,6 +175,8 @@ function App(){
   const tasksPollRef = useRef(null);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const isAuthenticated = Boolean(authToken && currentUser);
+  const [queuedTaskInfo, setQueuedTaskInfo] = useState(null);
+  const queuedCheckRef = useRef(null);
 
   const clearActiveTask = useCallback(() => {
     setActiveTaskId(null);
@@ -285,6 +287,64 @@ function App(){
     });
   };
 
+  function runProcessingInterval({ sessionId, complexity }) {
+    const estimatedDuration = Math.max(4000, complexity * 35); // мс
+    const step = 5;
+    const intervalDelay = Math.max(200, Math.floor(estimatedDuration / (100 / step)));
+
+    processingTimerRef.current = setInterval(() => {
+      setProcessingProgress(prev => {
+        const next = Math.min(prev + step, 100);
+        if (next >= 100) {
+          clearProcessingTimer();
+          const snapshotOptions = deepCopyOptions(options);
+          const baseImage = imageURL;
+          if (!baseImage) {
+            processedOptionsRef.current = null;
+            storeProcessedImageURL(null);
+            setProcessingStatus('error');
+            setProcessingMessage('');
+            setProcessingError('Зображення було видалено до завершення обробки.');
+            patchActiveTask({ status: 'failed', progress: next, errorMessage: 'Зображення видалено до завершення.' });
+            clearActiveTask();
+            return next;
+          }
+          processedOptionsRef.current = snapshotOptions;
+          setProcessingStatus('completed');
+          setProcessingMessage('Формуємо файл для завантаження...');
+          generateProcessedImageURL(baseImage, snapshotOptions)
+            .then(url => {
+              if (processingSessionRef.current !== sessionId) {
+                if (url && typeof url === 'string' && url.startsWith('blob:')) {
+                  URL.revokeObjectURL(url);
+                }
+                return;
+              }
+              storeProcessedImageURL(url);
+              setProcessingMessage('Обробка завершена, файл готовий до завантаження.');
+              setProcessingError('');
+              patchActiveTask({ status: 'completed', progress: 100, resultSummary: 'Файл готовий до завантаження.' });
+              clearActiveTask();
+            })
+            .catch(() => {
+              if (processingSessionRef.current === sessionId) {
+                storeProcessedImageURL(null);
+                setProcessingStatus('error');
+                setProcessingError('Не вдалося підготувати файл для завантаження. Спробуйте ще раз.');
+                setProcessingMessage('');
+                patchActiveTask({ status: 'failed', progress: next, errorMessage: 'Не вдалося сформувати файл.' });
+                clearActiveTask();
+              }
+            });
+        } else {
+          setProcessingMessage(getProcessingStage(next));
+          patchActiveTask({ progress: next, status: 'running' }, { refresh: false });
+        }
+        return next;
+      });
+    }, intervalDelay);
+  }
+
   const handleLogout = useCallback(async () => {
     setAuthLoading(true);
     try {
@@ -321,6 +381,7 @@ function App(){
   function cleanupProcessedResult() {
     storeProcessedImageURL(null);
     processedOptionsRef.current = null;
+    setQueuedTaskInfo(null);
   }
 
   function generateProcessedImageURL(imageSrc, filtersSnapshot) {
@@ -503,7 +564,7 @@ async function clearImage(){
 }
 
 async function startProcessingTask(){
-  if (processingStatus === 'running') return;
+  if (processingStatus === 'running' || processingStatus === 'queued') return;
   if (!isAuthenticated || !authToken) {
     setProcessingStatus('error');
     setProcessingProgress(0);
@@ -536,21 +597,34 @@ async function startProcessingTask(){
   const sessionId = processingSessionRef.current;
   clearProcessingTimer();
   setProcessingError('');
-  setProcessingStatus('running');
   setProcessingProgress(0);
-  setProcessingMessage('Підготовка зображення...');
 
   const snapshot = deepCopyOptions(options);
-  let createdTask;
   try {
-    createdTask = await createTask({
+    const createResponse = await createTask({
       filters: snapshot,
       complexity,
       imageName: uploadedFileName || null,
     }, authToken);
+    const createdTask = createResponse.task;
     setActiveTaskId(createdTask.id);
     activeTaskIdRef.current = createdTask.id;
     refreshTasks(false);
+    if (createResponse.queued) {
+      setProcessingStatus('queued');
+      const estimate = createResponse.estimatedWaitSeconds ?? 0;
+      const position = createResponse.queuePosition ?? 1;
+      setProcessingMessage(`Запит поставлено у чергу (позиція ${position}). Орієнтовний час очікування ~ ${Math.max(estimate, 1)} с.`);
+      setProcessingProgress(0);
+      setQueuedTaskInfo({
+        taskId: createdTask.id,
+        sessionId,
+        complexity,
+        estimatedWaitSeconds: estimate,
+        queuePosition: position,
+      });
+      return;
+    }
   } catch (error) {
     setProcessingStatus('error');
     setProcessingProgress(0);
@@ -560,65 +634,14 @@ async function startProcessingTask(){
     return;
   }
 
-  const estimatedDuration = Math.max(4000, complexity * 35); // мс
-  const step = 5;
-  const intervalDelay = Math.max(200, Math.floor(estimatedDuration / (100 / step)));
-
-  processingTimerRef.current = setInterval(() => {
-    setProcessingProgress(prev => {
-      const next = Math.min(prev + step, 100);
-      if (next >= 100) {
-        clearProcessingTimer();
-        const snapshotOptions = deepCopyOptions(options);
-        const baseImage = imageURL;
-        if (!baseImage) {
-          processedOptionsRef.current = null;
-          storeProcessedImageURL(null);
-          setProcessingStatus('error');
-          setProcessingMessage('');
-          setProcessingError('Зображення було видалено до завершення обробки.');
-          patchActiveTask({ status: 'failed', progress: next, errorMessage: 'Зображення видалено до завершення.' });
-          clearActiveTask();
-          return next;
-        }
-        processedOptionsRef.current = snapshotOptions;
-        setProcessingStatus('completed');
-        setProcessingMessage('Формуємо файл для завантаження...');
-        generateProcessedImageURL(baseImage, snapshotOptions)
-          .then(url => {
-            if (processingSessionRef.current !== sessionId) {
-              if (url && typeof url === 'string' && url.startsWith('blob:')) {
-                URL.revokeObjectURL(url);
-              }
-              return;
-            }
-            storeProcessedImageURL(url);
-            setProcessingMessage('Обробка завершена, файл готовий до завантаження.');
-            setProcessingError('');
-            patchActiveTask({ status: 'completed', progress: 100, resultSummary: 'Файл готовий до завантаження.' });
-            clearActiveTask();
-          })
-          .catch(() => {
-            if (processingSessionRef.current === sessionId) {
-              storeProcessedImageURL(null);
-              setProcessingStatus('error');
-              setProcessingError('Не вдалося підготувати файл для завантаження. Спробуйте ще раз.');
-              setProcessingMessage('');
-              patchActiveTask({ status: 'failed', progress: next, errorMessage: 'Не вдалося сформувати файл.' });
-              clearActiveTask();
-            }
-          });
-      } else {
-        setProcessingMessage(getProcessingStage(next));
-        patchActiveTask({ progress: next, status: 'running' }, { refresh: false });
-      }
-      return next;
-    });
-  }, intervalDelay);
+  setProcessingStatus('running');
+  setProcessingMessage('Підготовка зображення...');
+  setProcessingProgress(0);
+  runProcessingInterval({ sessionId, complexity });
 }
 
 async function cancelProcessingTask(){
-  if (processingStatus !== 'running') return;
+  if (processingStatus !== 'running' && processingStatus !== 'queued') return;
   clearProcessingTimer();
   setProcessingStatus('cancelled');
   setProcessingProgress(0);
@@ -809,6 +832,54 @@ useEffect(() => {
 }, [isAuthenticated, refreshTasks]);
 
 useEffect(() => {
+  if (!queuedTaskInfo || !authToken) {
+    if (queuedCheckRef.current) {
+      clearInterval(queuedCheckRef.current);
+      queuedCheckRef.current = null;
+    }
+    return undefined;
+  }
+
+  const attemptActivation = async () => {
+    try {
+      const task = await updateTask(queuedTaskInfo.taskId, { status: 'running' }, authToken);
+      if (task?.status === 'running') {
+        if (queuedCheckRef.current) {
+          clearInterval(queuedCheckRef.current);
+          queuedCheckRef.current = null;
+        }
+        setQueuedTaskInfo(null);
+        setActiveTaskId(task.id);
+        activeTaskIdRef.current = task.id;
+        setProcessingStatus('running');
+        setProcessingMessage('Підготовка зображення...');
+        setProcessingProgress(0);
+        runProcessingInterval({ sessionId: queuedTaskInfo.sessionId, complexity: queuedTaskInfo.complexity });
+        refreshTasks(false);
+      }
+    } catch (error) {
+      if (error?.status === 409 && error?.details?.estimatedWaitSeconds) {
+        const estimate = Math.max(error.details.estimatedWaitSeconds, 1);
+        const position = error.details.queuePosition ?? queuedTaskInfo.queuePosition ?? 1;
+        setProcessingMessage(`Запит все ще у черзі (позиція ${position}). Орієнтовний час очікування ~ ${estimate} с.`);
+        setQueuedTaskInfo((prev) => (prev ? { ...prev, estimatedWaitSeconds: estimate, queuePosition: position } : prev));
+      } else if (error?.status && error?.status >= 400) {
+        setProcessingError(error?.message ?? 'Не вдалося активувати задачу.');
+      }
+    }
+  };
+
+  attemptActivation();
+  queuedCheckRef.current = setInterval(attemptActivation, 5000);
+  return () => {
+    if (queuedCheckRef.current) {
+      clearInterval(queuedCheckRef.current);
+      queuedCheckRef.current = null;
+    }
+  };
+}, [queuedTaskInfo, authToken, refreshTasks]);
+
+useEffect(() => {
   return () => {
     const taskId = activeTaskIdRef.current;
     if (taskId && authToken) {
@@ -877,6 +948,8 @@ const processingStatusText = (() => {
       return 'Готово';
     case 'cancelled':
       return 'Скасовано';
+    case 'queued':
+      return 'У черзі';
     case 'error':
       return 'Помилка';
     default:

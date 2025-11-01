@@ -21,6 +21,7 @@ const statusLabels = {
   completed: 'Завершено',
   cancelled: 'Скасовано',
   failed: 'Помилка',
+  queued: 'У черзі',
   pending: 'Очікує запуску',
 };
 

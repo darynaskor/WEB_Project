@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server/load-balancer.cjs",
+    "server:max1": "MAX_ACTIVE_TASKS=1 node server/load-balancer.cjs",
     "server:single": "node server/index.cjs"
   },
   "dependencies": {

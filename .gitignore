@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 server/*.db
+server/*.db-shm
+server/*.db-wal
 server/certs/*.key
 server/certs/*.crt
 *.pem

@@ -3,16 +3,19 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://localhost:4000/api';
 async function handleResponse(response) {
   if (!response.ok) {
     let message = 'Сталася помилка під час запиту до сервера.';
+    let details = null;
     try {
       const json = await response.json();
       if (json?.error) {
         message = json.error;
       }
+      details = json;
     } catch {
       // ignore parse errors
     }
     const error = new Error(message);
     error.status = response.status;
+    error.details = details;
     throw error;
   }
   return response.json();
@@ -53,7 +56,7 @@ export async function createTask(payload, token) {
     },
     token,
   );
-  return data.task;
+  return data;
 }
 
 export async function updateTask(id, payload, token) {
