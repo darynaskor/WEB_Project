@@ -2,35 +2,17 @@
   "name": "image-manager",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "start": "npm run dev",
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "server": "node server/load-balancer.cjs",
-    "server:max1": "MAX_ACTIVE_TASKS=1 node server/load-balancer.cjs",
-    "server:single": "node server/index.cjs"
-  },
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.5.0",
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.36.0",
-    "@types/react": "^19.1.16",
-    "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.4",
-    "eslint": "^9.36.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.22",
-    "globals": "^16.4.0",
-    "vite": "^7.1.7"
+    "frontend:dev": "npm run dev --workspace frontend",
+    "frontend:build": "npm run build --workspace frontend",
+    "frontend:lint": "npm run lint --workspace frontend",
+    "frontend:preview": "npm run preview --workspace frontend",
+    "backend:start": "npm run start --workspace backend",
+    "backend:start:max1": "npm run start:max1 --workspace backend",
+    "backend:start:single": "npm run start:single --workspace backend"
   }
 }

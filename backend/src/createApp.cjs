@@ -38,11 +38,66 @@ function createApp(options = {}) {
     maxTasksStored = Number(process.env.MAX_TASKS_STORED || 100),
     averageTaskSeconds = Number(process.env.AVERAGE_TASK_SECONDS || 15),
     serverId = process.env.APP_SERVER_ID || 'app-1',
+    allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+      : ['http://localhost:5173', 'https://localhost:5173'],
+    staleTaskTimeoutSeconds = Number(process.env.STALE_TASK_TIMEOUT_SECONDS || 120),
   } = options;
 
   const app = express();
-  app.use(cors());
+  const corsOptions = {
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  };
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
   app.use(bodyParser.json({ limit: '10mb' }));
+
+  function cleanupStaleTasks(userId) {
+    if (!userId || !Number.isFinite(staleTaskTimeoutSeconds) || staleTaskTimeoutSeconds <= 0) {
+      return;
+    }
+    const cutoffIso = new Date(Date.now() - staleTaskTimeoutSeconds * 1000).toISOString();
+    try {
+      const nowIso = new Date().toISOString();
+
+      const cancelQueuedStmt = db.prepare(`
+        UPDATE tasks
+        SET status = 'cancelled',
+            error_message = 'Задачу скасовано через неактивність клієнта.',
+            updated_at = @nowIso
+        WHERE user_id = @userId
+          AND status = 'queued'
+          AND updated_at < @cutoffIso
+      `);
+      cancelQueuedStmt.run({ userId, nowIso, cutoffIso });
+
+      const failRunningStmt = db.prepare(`
+        UPDATE tasks
+        SET status = 'failed',
+            error_message = 'Задачу зупинено через неактивність клієнта.',
+            updated_at = @nowIso
+        WHERE user_id = @userId
+          AND status = 'running'
+          AND updated_at < @cutoffIso
+      `);
+      failRunningStmt.run({ userId, nowIso, cutoffIso });
+    } catch (error) {
+      console.error(`[${serverId}] Не вдалося очистити застарілі задачі`, error);
+    }
+  }
 
   function signToken(user) {
     return jwt.sign({ id: user.id, email: user.email }, jwtSecret, { expiresIn: tokenExpiry });
@@ -63,6 +118,7 @@ function createApp(options = {}) {
         return res.status(401).json({ error: 'Користувача не знайдено.' });
       }
       req.user = mapUser(user);
+      cleanupStaleTasks(req.user.id);
       next();
     } catch (error) {
       console.error(`[${serverId}] JWT error`, error);

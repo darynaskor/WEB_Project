@@ -1,147 +1,25 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './App.css';
-import Slider from './Slider.jsx'
-import SidebarItem from './SidebarItem.jsx';
-import HistoryPanel from './HistoryPanel.jsx';
-import TaskHistory from './TaskHistory.jsx';
-import AuthPanel from './AuthPanel.jsx';
-import { fetchTasks, createTask, updateTask, cancelTask } from '../api/tasks.js';
-import { login as loginRequest, register as registerRequest } from '../api/auth.js';
+import AuthPanel from '../AuthPanel.jsx';
+import AppLayout from './AppLayout.jsx';
+import { fetchTasks, createTask, updateTask, cancelTask } from '../../api/tasks.js';
+import { login as loginRequest, register as registerRequest } from '../../api/auth.js';
+import {
+  DEFAULT_OPTIONS,
+  MAX_HISTORY_ENTRIES,
+  MAX_TASK_COMPLEXITY,
+} from '../../config/filters.js';
+import {
+  buildFilterString,
+  calculateTaskComplexity,
+  deepCopyOptions,
+} from '../../utils/filters.js';
+import { createHistoryEntry } from '../../utils/history.js';
+import { generateProcessedImageURL, revokeImageURL } from '../../utils/images.js';
+import { getProcessingStage } from '../../utils/processing.js';
 
-const DEFAULT_OPTIONS=[
-  {
-    name:'BRIGHTNESS',
-    property:'brightness',
-    value:100,
-    range:{
-      min:0,
-      max:200
-    },
-    unit: '%'
-  },
-    {
-    name:'CONTRAST',
-    property:'contrast',
-    value:100,
-    range:{
-      min:0,
-      max:200
-    },
-    unit: '%'
-  },
-    {
-    name:'SATURATION',
-    property:'saturate',
-    value:100,
-    range:{
-      min:0,
-      max:200
-    },
-    unit: '%'
-  },
-    {
-    name:'GRAYSCALE',
-    property:'grayscale',
-    value:0,
-    range:{
-      min:0,
-      max:100
-    },
-    unit: '%'
-  },
-    {
-    name:'SEPIA',
-    property:'sepia',
-    value:0,
-    range:{
-      min:0,
-      max:100
-    },
-    unit: '%'
-  },
-      {
-    name:'HUE',
-    property:'hue-rotate',
-    value:0,
-    range:{
-      min:0,
-      max:360
-    },
-    unit: 'deg'
-  },
-      {
-    name:'BLUR',
-    property:'blur',
-    value:0,
-    range:{
-      min:0,
-      max:20
-    },
-    unit: 'px'
-  }
-]
-
-function deepCopyOptions(options){
-  return options.map(o => ({ ...o, range: { ...o.range } }));
-}
-
-const MAX_HISTORY_ENTRIES = 10;
-const MAX_TASK_COMPLEXITY = 70; 
-
-function buildFilterString(optionList) {
-  return optionList.map(option => `${option.property}(${option.value}${option.unit})`).join(' ');
-}
-
-function calculateTaskComplexity(currentOptions, baselineOptions) {
-  return currentOptions.reduce((total, option, index) => {
-    const baselineValue = baselineOptions[index]?.value ?? 0;
-    return total + Math.abs(option.value - baselineValue);
-  }, 0);
-}
-
-function getProcessingStage(progress) {
-  if (progress === 0) return 'Очікує запуску';
-  if (progress < 40) return 'Підготовка зображення';
-  if (progress < 80) return 'Застосування фільтрів';
-  if (progress < 100) return 'Фіналізація обробки';
-  return 'Обробка завершена';
-}
-
-function createHistoryEntry({
-  action,
-  label,
-  previousValue,
-  newValue,
-  unit,
-  resultOptions,
-  selectedIndex,
-}) {
-  const id =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `entry-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  return {
-    id,
-    timestamp: new Date().toISOString(),
-    action,
-    label,
-    previousValue,
-    newValue,
-    unit,
-    resultOptions: resultOptions ? deepCopyOptions(resultOptions) : null,
-    selectedIndex,
-  };
-}
-
-function revokeImageURL(url) {
-  if (url && url.startsWith('blob:')) {
-    URL.revokeObjectURL(url);
-  }
-}
-
-function App(){
-  const[selectedOptionIndex, setselectedOptionIndex]=useState(0)
+function AppContainer() {
+  const[selectedOptionIndex, setSelectedOptionIndex]=useState(0)
   const[options, setOptions]=useState(deepCopyOptions(DEFAULT_OPTIONS))
   const [imageURL, setImageURL] = useState(null);
   const fileInputRef = useRef(null); // ADDED: ref to hidden file input
@@ -271,22 +149,21 @@ function App(){
     }
   }, [clearActiveTask, persistAuth]);
 
-  const clearProcessingTimer = () => {
+  const clearProcessingTimer = useCallback(() => {
     if (processingTimerRef.current) {
       clearInterval(processingTimerRef.current);
       processingTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const storeProcessedImageURL = (url) => {
+  const storeProcessedImageURL = useCallback((url) => {
     setProcessedImageURL(prev => {
       if (prev && prev.startsWith('blob:')) {
         URL.revokeObjectURL(prev);
       }
       return url;
     });
-  };
-
+  }, []);
   function runProcessingInterval({ sessionId, complexity }) {
     const estimatedDuration = Math.max(4000, complexity * 35); // мс
     const step = 5;
@@ -378,11 +255,11 @@ function App(){
     });
   };
 
-  function cleanupProcessedResult() {
+  const cleanupProcessedResult = useCallback(() => {
     storeProcessedImageURL(null);
     processedOptionsRef.current = null;
     setQueuedTaskInfo(null);
-  }
+  }, [storeProcessedImageURL]);
 
   function generateProcessedImageURL(imageSrc, filtersSnapshot) {
     return new Promise((resolve, reject) => {
@@ -721,7 +598,7 @@ function handleBack(){
   setUndoStack(prev => prev.slice(0, -1));
 
   setOptions(restoredOptions);
-  setselectedOptionIndex(restoredIndex);
+  setSelectedOptionIndex(restoredIndex);
 
   const labelForBack = lastSnapshot.label || lastSnapshot.action || 'Back';
   const unitForBack = lastSnapshot.unit ?? '';
@@ -764,7 +641,7 @@ function handleReset(){
 
   const defaults = deepCopyOptions(initialOptionsRef.current);
   setOptions(defaults);
-  setselectedOptionIndex(0);
+  setSelectedOptionIndex(0);
 
   const entry = createHistoryEntry({
     action: 'reset',
@@ -806,7 +683,7 @@ useEffect(() => {
   return () => {
     clearProcessingTimer();
   };
-}, []);
+}, [clearProcessingTimer]);
 
 useEffect(() => {
   if (!isAuthenticated) {
@@ -917,7 +794,7 @@ function handleHistoryRestore(entry){
   const targetIndex = typeof entry.selectedIndex === 'number' ? entry.selectedIndex : 0;
 
   setOptions(restoredOptions);
-  setselectedOptionIndex(targetIndex);
+  setSelectedOptionIndex(targetIndex);
 
   const restoreEntry = createHistoryEntry({
     action: 'restore',
@@ -971,112 +848,60 @@ if (!isAuthenticated) {
 }
 
 return (
-    <> 
-      <nav className="toolbar">
-        <span className="toolbar-brand">IMAGE MANAGER</span>
-        <div className="toolbar-user">
-          <span className="toolbar-email">{currentUser?.email}</span>
-          <button className="toolbar-logout" type="button" onClick={handleLogout} disabled={authLoading}>
-            Вийти
-          </button>
-        </div>
-      </nav>
-
-      {/* ADDED: hidden input + visible upload/clear/back/reset buttons */}
-      <div className="top-controls">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
-          style={{ display: 'none' }}
-        />
-        <button className="btn" onClick={openFilePicker}>UPLOAD</button>
-        <button className="btn" onClick={clearImage} disabled={!imageURL}>DELETE</button>
-        <button className="btn" onClick={handleBack} disabled={undoStack.length === 0}>BACK</button>
-        <button className="btn" onClick={handleReset}>RESET</button>
-      </div>
-
-      <div className="processing-panel">
-        <div className="processing-header">
-          <h3>Обробка зображення</h3>
-          <p>Максимальна складність задачі — {MAX_TASK_COMPLEXITY}. Поточне значення: {currentComplexity}.</p>
-        </div>
-        {processingError ? <div className="processing-error">{processingError}</div> : null}
-        <div className="processing-actions">
-          <button
-            className="btn"
-            onClick={startProcessingTask}
-            disabled={processingStatus === 'running'}
-          >
-            Запустити обробку
-          </button>
-          <button
-            className="btn btn-stop"
-            onClick={cancelProcessingTask}
-            disabled={processingStatus !== 'running'}
-          >
-            Скасувати
-          </button>
-          <button
-            className="btn btn-download"
-            onClick={downloadProcessedImage}
-            disabled={processingStatus !== 'completed'}
-          >
-            Завантажити результат
-          </button>
-        </div>
-        <div className="processing-progress">
-          <div className="processing-status">
-            <span>Статус: {processingStatusText}</span>
-            <span>{processingProgress}%</span>
-          </div>
-          <div className="processing-track">
-            <div
-              className="processing-bar"
-              style={{ width: `${processingProgress}%` }}
-            />
-          </div>
-          <div className="processing-stage">{stageText}</div>
-          <div className="processing-current-task">
-            Активна задача: {activeTaskId ? `#${activeTaskId}` : '—'}
-          </div>
-        </div>
-      </div>
-
-      <TaskHistory tasks={tasks} isLoading={isLoadingTasks} error={tasksError} />
-
-      <div className="container">
-        <div className="main-image" style={getImageStyle()}>
-          {/* ADDED: show uploaded image if present */}
-          {imageURL ? (
-            <img src={imageURL} alt="Uploaded" className="image-preview" />
-          ) : null}
-        </div>
-
-        <div className="sidebar">
-          {options.map((option,index)=>{
-            return (
-            <SidebarItem
-            key={index}
-            name={option.name}
-            active={index === selectedOptionIndex}
-            handleClick={()=>setselectedOptionIndex(index)}
-            />
-          )
-          })}
-          <HistoryPanel history={history} onRestore={handleHistoryRestore} />
-        </div>
-
-        <Slider 
-        min={selectedOption.range.min}
-        max={selectedOption.range.max}
-        value={selectedOption.value}
-        handleChange={handleSliderChange}
-        />
-      </div>
-    </>
-  )
+  <AppLayout
+    toolbar={{
+      email: currentUser?.email ?? '',
+      onLogout: handleLogout,
+      logoutDisabled: authLoading,
+    }}
+    topControls={{
+      fileInputRef,
+      onFileChange: handleImageUpload,
+      onOpenPicker: openFilePicker,
+      onClearImage: clearImage,
+      onBack: handleBack,
+      onReset: handleReset,
+      canUndo: undoStack.length > 0,
+      hasImage: Boolean(imageURL),
+    }}
+    processing={{
+      maxComplexity: MAX_TASK_COMPLEXITY,
+      currentComplexity,
+      errorMessage: processingError,
+      statusText: processingStatusText,
+      status: processingStatus,
+      progress: processingProgress,
+      stageText,
+      activeTaskId,
+      onStart: startProcessingTask,
+      onCancel: cancelProcessingTask,
+      onDownload: downloadProcessedImage,
+      disableStart: processingStatus === 'running',
+      disableCancel: processingStatus !== 'running',
+      disableDownload: processingStatus !== 'completed',
+    }}
+    taskHistory={{
+      tasks,
+      isLoading: isLoadingTasks,
+      error: tasksError,
+    }}
+    workspace={{
+      imageURL,
+      imageStyle: getImageStyle(),
+      options,
+      selectedOptionIndex,
+      onSelectOption: setSelectedOptionIndex,
+      history,
+      onHistoryRestore: handleHistoryRestore,
+      slider: {
+        min: selectedOption.range.min,
+        max: selectedOption.range.max,
+        value: selectedOption.value,
+        onChange: handleSliderChange,
+      },
+    }}
+  />
+);
 }
 
-export default App;
+export default AppContainer;

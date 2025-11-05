@@ -1,0 +1,17 @@
+{
+  "name": "image-manager-backend",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "start": "node src/load-balancer.cjs",
+    "start:max1": "MAX_ACTIVE_TASKS=1 node src/load-balancer.cjs",
+    "start:single": "node src/index.cjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.5.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
