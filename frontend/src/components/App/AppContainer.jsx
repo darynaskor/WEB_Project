@@ -34,6 +34,7 @@ function AppContainer() {
   const processingTimerRef = useRef(null);
   const processedOptionsRef = useRef(null);
   const processingSessionRef = useRef(0);
+  ///
   const [authToken, setAuthToken] = useState(() => {
     if (typeof window === 'undefined') return '';
     const stored = window.localStorage.getItem('image-manager-token');
@@ -382,7 +383,7 @@ function getImageStyle(){
   return {filter:filters}
 }
 
-// ADDED: handle upload (revoke previous URL to avoid leaks)
+
 async function handleImageUpload(e) {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -417,12 +418,12 @@ async function handleImageUpload(e) {
 
 
 
-// ADDED: open hidden file input
+//open hidden file input
 function openFilePicker(){
   fileInputRef.current?.click();
 }
 
-// ADDED: clear image
+// clear image
 async function clearImage(){
   if(imageURL){
     revokeImageURL(imageURL);
