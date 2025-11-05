@@ -1,49 +1,16 @@
 # Image Manager: Асинхронний Сервіс Обробки Зображень
 
-## Оновлення: локальний API для історії задач
-
-У репозиторій додано Node.js API на базі SQLite (`server/index.cjs`), що зберігає історію обробки зображень та стан активних задач. Для запуску фронтенда тепер треба підняти два процеси:
-
-1. **Сервер задач (балансувальник + два application servers)**
-   ```bash
-   npm install
-   npm run server
-   ```
-   Ця команда запускає HTTPS load balancer на `https://localhost:4000/api`, який розподіляє запити між двома application серверами на `http://localhost:5001` і `http://localhost:5002`. Кількість портів можна задати змінною `APP_SERVER_PORTS` (наприклад, `APP_SERVER_PORTS=5001,5002,5003`). 
-
-   Макс. кількість паралельних задач на користувача контролюється `MAX_ACTIVE_TASKS` (стандартно 5). Дані спільні для всіх бекендів і зберігаються в `server/tasks.db`.
-
-   Є швидка команда, що обмежує активні задачі до 1 (зручно для демонстрації черги):
-   ```bash
-   npm run server:max1
-   ```
-
-   Для відлагодження доступний режим без балансувальника:
-   ```bash
-   npm run server:single
-   ```
-
-2. **Фронтенд (Vite)**
-   ```bash
-   npm run dev
-   ```
-   Додаток очікує доступний API на `https://localhost:4000/api`. При потребі можна задати `VITE_API_BASE` у `.env` файлі.
-
-Функціонал застосунку тепер відповідає вимогам:
-- обмеження на складність задачі (перевірка на клієнті) та ліміт одночасних задач (перевірка на сервері);
-- клієнт показує прогрес, дозволяє скасувати задачу, запускати нову і завантажувати результат обробки;
-- якщо всі слоти зайняті, бекенд ставить задачу у чергу, повертає позицію та орієнтовний час очікування; клієнт автоматично інформує користувача та запускає обробку, щойно звільняється ресурс;
-- історія задач та статуси (включно з `queued`) зберігаються у БД і доступні на вкладці «Історія задач».
+## Оновлення: монорепозиторій з окремими frontend / backend
 
 ## HTTPS та авторизація
 
-- Сервер працює **по HTTPS**. Стандарні шляхи до самопідписаного сертифіката: `server/certs/server.crt`, ключ: `server/certs/server.key`. Можна змінити через змінні `CERT_PATH` та `KEY_PATH`.
+- Сервер працює **по HTTPS**. Стандарні шляхи до самопідписаного сертифіката: `backend/src/certs/server.crt`, ключ: `backend/src/certs/server.key`. Можна змінити через змінні `CERT_PATH` та `KEY_PATH`.
 - Приклад генерації сертифіката:
   ```bash
-  mkdir -p server/certs
+  mkdir -p backend/src/certs
   openssl req -x509 -newkey rsa:2048 \\
-    -keyout server/certs/server.key \\
-    -out server/certs/server.crt \\
+    -keyout backend/src/certs/server.key \\
+    -out backend/src/certs/server.crt \\
     -days 365 -nodes -subj "/CN=localhost"
   ```
   Після цього додайте сертифікат до довірених у браузері (для Chrome/Safari — подвійний клік на `.crt`).
@@ -124,4 +91,92 @@
 - Підтримка додаткових фільтрів та ефектів  
 
 ---
+
+## Структура проєкту
+
+Репозиторій розбитий на два npm-workspace:
+
+```
+.
+├─ package.json          # Workspaces + загальні скрипти
+├─ frontend/             # Vite + React
+│  ├─ package.json
+│  ├─ index.html
+│  └─ src/
+│     ├─ api/            # fetch-хелпери (auth, tasks)
+│     ├─ components/
+│     │  └─ App/         # AppContainer + підкомпоненти UI
+│     ├─ config/         # DEFAULT_OPTIONS, MAX_TASK_COMPLEXITY
+│     └─ utils/          # buildFilterString, history helpers, image helpers
+└─ backend/              # HTTPS load balancer + application servers
+   ├─ package.json
+   └─ src/
+      ├─ load-balancer.cjs  # Round-robin HTTPS → HTTP
+      ├─ index.cjs          # Одинокий сервер (без LB)
+      ├─ createApp.cjs      # Express-додаток (JWT, черга, CORS, очистка)
+      ├─ db.cjs             # Ініціалізація SQLite
+      └─ certs/             # Самопідписані сертифікати (локальні)
+```
+
+## Запуск
+
+> Перший запуск: `npm install` в корені встановить залежності обох workspace.
+
+### 1. Бекенд (HTTPS load balancer + два application server-и)
+
+```bash
+npm run backend:start
+```
+
+- LB слухає `https://localhost:4000` і розподіляє запити на `http://localhost:5001` та `http://localhost:5002`.  
+- Кастомні порти: `APP_SERVER_PORTS="5001,5002,5003" npm run backend:start`.  
+- Обмеження активних задач: `MAX_ACTIVE_TASKS` (стандартно 5). Для демонстрації черги:
+
+```bash
+npm run backend:start:max1   # MAX_ACTIVE_TASKS=1
+```
+
+- Спрощений режим без балансувальника:
+
+```bash
+npm run backend:start:single
+```
+
+### 2. Фронтенд (Vite)
+
+```bash
+npm run frontend:dev
+```
+
+За замовчуванням фронтенд звертається до `https://localhost:4000/api`. Можна задати `VITE_API_BASE` у `.env`.
+
+### 3. Авторизація та токени
+
+1. Зареєструйтесь або увійдіть. Бекенд поверне `{ user, token }`.
+2. `AppContainer` зберігає токен у `localStorage` (`image-manager-token`) і використовує для запитів (`Authorization: Bearer <token>`).
+3. При завершенні/виході натисніть «Вийти», щоб очистити токен.
+
+### 4. Черга задач
+
+- Якщо вичерпано `MAX_ACTIVE_TASKS`, `POST /api/tasks` повертає `202` з `queued=true`, `queuePosition`, `estimatedWaitSeconds`.
+- Фронтенд показує статус «У черзі» та кожні 5 секунд пробує активувати задачу.
+- Бекенд автоматично очищує "завислі" задачі — після `STALE_TASK_TIMEOUT_SECONDS` (120с) статус `queued` → `cancelled`, `running` → `failed`.
+
+### 5. Перевірка load balancing
+
+```bash
+curl -k https://localhost:4000/health
+```
+
+Відповіді будуть чергуватись між `serverId: "app-1"` та `serverId: "app-2"`, що засвідчує роботу round-robin LB.
+
+## Ключові можливості
+
+- Обмеження складності задачі на фронтенді (`MAX_TASK_COMPLEXITY`).
+- JWT-авторизація, HTTPS-з’єднання, CORS whitelist.
+- Історія задач та статуси зберігаються в SQLite (`backend/src/tasks.db`).
+- Керування чергою, обмеження активних задач, автоматичне очищення застарілих записів.
+- UI: прогрес-бар, undo/redo (Back/Reset), історія фільтрів, завантаження результату.
+
+Готово до розгортання на локальній машині та демонстрації вимог. !*** End Patch
    
