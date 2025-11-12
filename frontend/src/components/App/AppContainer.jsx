@@ -22,10 +22,10 @@ function AppContainer() {
   const[selectedOptionIndex, setSelectedOptionIndex]=useState(0)
   const[options, setOptions]=useState(deepCopyOptions(DEFAULT_OPTIONS))
   const [imageURL, setImageURL] = useState(null);
-  const fileInputRef = useRef(null); // ADDED: ref to hidden file input
-  const initialOptionsRef = useRef(deepCopyOptions(DEFAULT_OPTIONS)); // ADDED: store initial for RESET
-  const [history, setHistory] = useState([]); // ADDED: history log for UI
-  const [undoStack, setUndoStack] = useState([]); // ADDED: undo stack for BACK
+  const fileInputRef = useRef(null); 
+  const initialOptionsRef = useRef(deepCopyOptions(DEFAULT_OPTIONS)); 
+  const [history, setHistory] = useState([]); 
+  const [undoStack, setUndoStack] = useState([]); 
   const [processingStatus, setProcessingStatus] = useState('idle');
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingMessage, setProcessingMessage] = useState('');
@@ -262,49 +262,6 @@ function AppContainer() {
     setQueuedTaskInfo(null);
   }, [storeProcessedImageURL]);
 
-  function generateProcessedImageURL(imageSrc, filtersSnapshot) {
-    return new Promise((resolve, reject) => {
-      if (!imageSrc) {
-        reject(new Error('Missing image source'));
-        return;
-      }
-
-      const filterSource = Array.isArray(filtersSnapshot) ? filtersSnapshot : DEFAULT_OPTIONS;
-      const filterString = buildFilterString(filterSource);
-      const img = new Image();
-      if (!imageSrc.startsWith('blob:') && !imageSrc.startsWith('data:')) {
-        img.crossOrigin = 'anonymous';
-      }
-
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth || img.width;
-          canvas.height = img.naturalHeight || img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.filter = filterString;
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob(blob => {
-            if (!blob) {
-              reject(new Error('Failed to create blob from canvas'));
-              return;
-            }
-            const resultURL = URL.createObjectURL(blob);
-            resolve(resultURL);
-          }, 'image/png', 0.92);
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      img.onerror = () => {
-        reject(new Error('Failed to load image for processing'));
-      };
-
-      img.src = imageSrc;
-    });
-  }
-
   const pushUndoSnapshot = ({
     optionsSnapshot,
     selectedIndex,
@@ -334,9 +291,9 @@ function AppContainer() {
   };
 
   function handleSliderChange({target}){
-    const newVal = Number(target.value); // ADDED: ensure numeric
+    const newVal = Number(target.value); 
     const currentVal = options[selectedOptionIndex].value;
-    if (newVal === currentVal) return; // nothing changed -> don't push to history
+    if (newVal === currentVal) return; 
 
     if (processingStatus !== 'idle') {
       clearProcessingTimer();
@@ -412,18 +369,13 @@ async function handleImageUpload(e) {
   setImageURL(objectUrl);
   setUploadedFileName(file.name || '');
 
-  // даємо можливість повторно вибрати той самий файл
   e.target.value = '';
 };
 
-
-
-//open hidden file input
 function openFilePicker(){
   fileInputRef.current?.click();
 }
 
-// clear image
 async function clearImage(){
   if(imageURL){
     revokeImageURL(imageURL);
@@ -665,7 +617,6 @@ function handleReset(){
   processingSessionRef.current += 1;
 }
 
-// ADDED: cleanup objectURL on unmount
 useEffect(() => {
   return () => {
     revokeImageURL(imageURL);
@@ -762,7 +713,6 @@ useEffect(() => {
     const taskId = activeTaskIdRef.current;
     if (taskId && authToken) {
       cancelTask(taskId, authToken).catch(() => {
-        // ігноруємо помилку під час виходу
       });
     }
   };
