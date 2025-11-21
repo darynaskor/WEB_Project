@@ -65,6 +65,7 @@ function createApp(options = {}) {
   app.options('*', cors(corsOptions));
   app.use(bodyParser.json({ limit: '10mb' }));
 
+  // АВТООЧИЩЕННЯ ЗАСТАРІЛИХ ЗАДАЧ (скасовує queued і failed, якщо клієнт довго не заходив)
   function cleanupStaleTasks(userId) {
     if (!userId || !Number.isFinite(staleTaskTimeoutSeconds) || staleTaskTimeoutSeconds <= 0) {
       return;
@@ -73,6 +74,7 @@ function createApp(options = {}) {
     try {
       const nowIso = new Date().toISOString();
 
+      // скасування queued задач, якщо давно не було запитів від клієнта
       const cancelQueuedStmt = db.prepare(`
         UPDATE tasks
         SET status = 'cancelled',
@@ -84,6 +86,7 @@ function createApp(options = {}) {
       `);
       cancelQueuedStmt.run({ userId, nowIso, cutoffIso });
 
+// Переведення running задач у failed, якщо клієнт “загубився”
       const failRunningStmt = db.prepare(`
         UPDATE tasks
         SET status = 'failed',
@@ -99,6 +102,7 @@ function createApp(options = {}) {
     }
   }
 
+// Генерація JWT-токена
   function signToken(user) {
     return jwt.sign({ id: user.id, email: user.email }, jwtSecret, { expiresIn: tokenExpiry });
   }
@@ -126,10 +130,12 @@ function createApp(options = {}) {
     }
   }
 
+// health-check для балансувальника
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', serverId });
   });
 
+ // реєстрація користувача (створення запису в users)
   app.post('/api/auth/register', (req, res) => {
     const { email, password } = req.body || {};
 
@@ -171,6 +177,7 @@ function createApp(options = {}) {
     res.status(201).json({ user, token });
   });
 
+  //логін користувача (перевірка email і пароля)
   app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body || {};
 
@@ -196,6 +203,7 @@ function createApp(options = {}) {
     res.json({ user, token });
   });
 
+  //історія задач користувача
   app.get('/api/tasks', authenticate, (req, res) => {
     const stmt = db.prepare(`
       SELECT id, status, progress, complexity, filters, image_name, result_summary, error_message, created_at, updated_at
@@ -208,6 +216,7 @@ function createApp(options = {}) {
     res.json({ tasks: rows.map(mapTask), serverId });
   });
 
+  //створення нової задачі + черга задач+ліміт активних задач
   app.post('/api/tasks', authenticate, (req, res) => {
     const { filters, complexity, imageName } = req.body || {};
 
@@ -273,6 +282,7 @@ function createApp(options = {}) {
     });
   });
 
+  //оновлення статусу задачі
   app.patch('/api/tasks/:id', authenticate, (req, res) => {
     const id = Number(req.params.id);
     if (!id) {
@@ -299,6 +309,7 @@ function createApp(options = {}) {
       return res.status(400).json({ error: 'Некоректний статус задачі.' });
     }
 
+  // логіка черги: якщо задача переходить у running зі статусу queued, перевіряємо ліміт
     if (nextStatus === 'running' && existing.status === 'queued') {
       const activeCountStmt = db.prepare(`
         SELECT COUNT(*) as cnt FROM tasks WHERE status = 'running' AND user_id = ? AND id != ?
@@ -369,6 +380,7 @@ function createApp(options = {}) {
     res.json({ task: mapTask(updated), serverId });
   });
 
+  //скасування задачі користувачем
   app.post('/api/tasks/:id/cancel', authenticate, (req, res) => {
     const id = Number(req.params.id);
     if (!id) {
@@ -381,6 +393,7 @@ function createApp(options = {}) {
       return res.status(404).json({ error: 'Задачу не знайдено.' });
     }
 
+    // можна скасувати лише queued або running задачі
     if (existing.status === 'completed' || existing.status === 'cancelled') {
       return res.status(409).json({ error: 'Задача вже завершена.' });
     }

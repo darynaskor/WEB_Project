@@ -1,5 +1,5 @@
 import React from 'react';
-
+//інформування про хід виконання задачі
 function ProcessingPanel({
   maxComplexity,
   currentComplexity,

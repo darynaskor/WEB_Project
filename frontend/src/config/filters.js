@@ -72,4 +72,4 @@ export const DEFAULT_OPTIONS = [
 ];
 
 export const MAX_HISTORY_ENTRIES = 10;
-export const MAX_TASK_COMPLEXITY = 70;
+export const MAX_TASK_COMPLEXITY = 70; //максимальна складність задачі 3

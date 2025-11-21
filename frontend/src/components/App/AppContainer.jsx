@@ -97,6 +97,7 @@ function AppContainer() {
     }
   }, [authToken, refreshTasks]);
 
+  //скасування активної задачі на сервері
   const cancelActiveTaskOnServer = useCallback(async (options = {}) => {
     const taskId = activeTaskIdRef.current;
     if (!taskId) return;
@@ -393,6 +394,7 @@ async function clearImage(){
   setProcessingError('');
 }
 
+//максимальна складність задачі
 async function startProcessingTask(){
   if (processingStatus === 'running' || processingStatus === 'queued') return;
   if (!isAuthenticated || !authToken) {
@@ -412,6 +414,7 @@ async function startProcessingTask(){
     return;
   }
 
+  //максимальна складність задачі 2
   const complexity = calculateTaskComplexity(options, initialOptionsRef.current);
   if (complexity > MAX_TASK_COMPLEXITY) {
     clearProcessingTimer();
