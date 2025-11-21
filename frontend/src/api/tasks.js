@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'https://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
 async function handleResponse(response) {
   if (!response.ok) {
