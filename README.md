@@ -32,7 +32,7 @@
 
 3. **Історія, стан, скасування, ліміт активних задач, зберігання в БД .** Бекенд: `backend/src/createApp.cjs` (черга, MAX_ACTIVE_TASKS, маршрути /api/tasks, /api/tasks/:id/cancel), дані в SQLite `backend/src/db.cjs`. Фронт: `AppContainer.jsx` (fetchTasks, cancelActiveTaskOnServer, TaskHistory).
 
-4. **Авторизація по HTTPS.** `backend/src/load-balancer.cjs` підіймає HTTPS LB на 4000 і розподіляє round-robin на HTTP application servers (порти з APP_SERVER_PORTS), перевірка через /health.
+4. **Авторизація по HTTPS.** Бекенд: `backend/src/load-balancer.cjs`/`backend/src/index.cjs `створюють HTTPS сервер із TLS, маршрути /api/auth/login|register з JWT у `backend/src/createApp.cjs`. Клієнт: `frontend/src/api/auth.js`, токен у localStorage.
 
 5. **Балансування навантаження.** Файл `backend/src/load-balancer.cjs` підіймає HTTPS LB на 4000 і розподіляє round-robin на HTTP application servers (порти з APP_SERVER_PORTS), перевірка через /health.
 
