@@ -1,6 +1,5 @@
 import React from 'react';
 import SidebarItem from '../SidebarItem.jsx';
-import HistoryPanel from '../HistoryPanel.jsx';
 import Slider from '../Slider.jsx';
 
 function ImageWorkspace({
@@ -9,8 +8,6 @@ function ImageWorkspace({
   options,
   selectedOptionIndex,
   onSelectOption,
-  history,
-  onHistoryRestore,
   slider,
 }) {
   return (
@@ -28,7 +25,6 @@ function ImageWorkspace({
             handleClick={() => onSelectOption(index)}
           />
         ))}
-        <HistoryPanel history={history} onRestore={onHistoryRestore} />
       </div>
 
       <Slider

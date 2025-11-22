@@ -11,7 +11,7 @@ function mapTask(row) {
     status: row.status,
     progress: row.progress,
     complexity: row.complexity,
-    filters: JSON.parse(row.filters),
+    filters: JSON.parse(row.filters || '[]'),
     imageName: row.image_name,
     resultSummary: row.result_summary,
     createdAt: row.created_at,
@@ -30,117 +30,72 @@ function mapUser(row) {
     : null;
 }
 
-function createApp(options = {}) {
-  const {
-    jwtSecret = process.env.JWT_SECRET || 'change-me-super-secret',
-    tokenExpiry = process.env.JWT_EXPIRES_IN || '2h',
-    maxActiveTasks = Number(process.env.MAX_ACTIVE_TASKS || 5),
-    maxTasksStored = Number(process.env.MAX_TASKS_STORED || 100),
-    averageTaskSeconds = Number(process.env.AVERAGE_TASK_SECONDS || 15),
-    serverId = process.env.APP_SERVER_ID || 'app-1',
-    allowedOrigins = process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-      : ['http://localhost:5173', 'https://localhost:5173'],
-    staleTaskTimeoutSeconds = Number(process.env.STALE_TASK_TIMEOUT_SECONDS || 120),
-  } = options;
+function createApp() {
+  const jwtSecret = process.env.JWT_SECRET || 'change-me-super-secret';
+  const tokenExpiry = '2h';
+
+
+  const MAX_TASKS_STORED = 100;                     
+  const MAX_ACTIVE_TASKS = Number(process.env.MAX_ACTIVE_TASKS || 2);   
+  const MAX_USER_TASKS = Number(process.env.MAX_USER_TASKS || 50);      
+  const MAX_TASK_COMPLEXITY = Number(process.env.MAX_TASK_COMPLEXITY || 100); 
 
   const app = express();
-  const corsOptions = {
-    origin(origin, callback) {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  };
-  app.use(cors(corsOptions));
-  app.options('*', cors(corsOptions));
+
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+    })
+  );
+
   app.use(bodyParser.json({ limit: '10mb' }));
 
-  // автоочищення застарілих задач (скасовує queued і failed, якщо клієнт довго не заходив)
-  function cleanupStaleTasks(userId) {
-    if (!userId || !Number.isFinite(staleTaskTimeoutSeconds) || staleTaskTimeoutSeconds <= 0) {
-      return;
-    }
-    const cutoffIso = new Date(Date.now() - staleTaskTimeoutSeconds * 1000).toISOString();
-    try {
-      const nowIso = new Date().toISOString();
-
-      // скасування queued задач, якщо давно не було запитів від клієнта
-      const cancelQueuedStmt = db.prepare(`
-        UPDATE tasks
-        SET status = 'cancelled',
-            error_message = 'Задачу скасовано через неактивність клієнта.',
-            updated_at = @nowIso
-        WHERE user_id = @userId
-          AND status = 'queued'
-          AND updated_at < @cutoffIso
-      `);
-      cancelQueuedStmt.run({ userId, nowIso, cutoffIso });
-
-// Переведення running задач у failed, якщо клієнт “загубився”
-      const failRunningStmt = db.prepare(`
-        UPDATE tasks
-        SET status = 'failed',
-            error_message = 'Задачу зупинено через неактивність клієнта.',
-            updated_at = @nowIso
-        WHERE user_id = @userId
-          AND status = 'running'
-          AND updated_at < @cutoffIso
-      `);
-      failRunningStmt.run({ userId, nowIso, cutoffIso });
-    } catch (error) {
-      console.error(`[${serverId}] Не вдалося очистити застарілі задачі`, error);
-    }
-  }
-
-// Генерація JWT-токена
   function signToken(user) {
-    return jwt.sign({ id: user.id, email: user.email }, jwtSecret, { expiresIn: tokenExpiry });
+    return jwt.sign({ id: user.id, email: user.email }, jwtSecret, {
+      expiresIn: tokenExpiry,
+    });
   }
 
   function authenticate(req, res, next) {
     const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
+
     if (!token) {
       return res.status(401).json({ error: 'Потрібна авторизація.' });
     }
 
     try {
       const payload = jwt.verify(token, jwtSecret);
-      const userStmt = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?');
+      const userStmt = db.prepare(
+        'SELECT id, email, created_at FROM users WHERE id = ?'
+      );
       const user = userStmt.get(payload.id);
       if (!user) {
         return res.status(401).json({ error: 'Користувача не знайдено.' });
       }
       req.user = mapUser(user);
-      cleanupStaleTasks(req.user.id);
       next();
     } catch (error) {
-      console.error(`[${serverId}] JWT error`, error);
+      console.error('JWT error', error);
       return res.status(401).json({ error: 'Недійсний токен.' });
     }
   }
 
-// health-check для балансувальника
   app.get('/health', (req, res) => {
-    res.json({ status: 'ok', serverId });
+    res.json({ status: 'ok' });
   });
 
- // реєстрація користувача (створення запису в users)
+
   app.post('/api/auth/register', (req, res) => {
     const { email, password } = req.body || {};
 
     if (typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Email та пароль є обовʼязковими.' });
+      return res
+        .status(400)
+        .json({ error: 'Email та пароль є обовʼязковими.' });
     }
 
     const trimmedEmail = email.trim().toLowerCase();
@@ -150,13 +105,17 @@ function createApp(options = {}) {
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ error: 'Пароль має містити щонайменше 6 символів.' });
+      return res
+        .status(400)
+        .json({ error: 'Пароль має містити щонайменше 6 символів.' });
     }
 
     const findStmt = db.prepare('SELECT id FROM users WHERE email = ?');
     const existing = findStmt.get(trimmedEmail);
     if (existing) {
-      return res.status(409).json({ error: 'Користувач із таким email вже існує.' });
+      return res
+        .status(409)
+        .json({ error: 'Користувач із таким email вже існує.' });
     }
 
     const now = new Date().toISOString();
@@ -171,23 +130,28 @@ function createApp(options = {}) {
       createdAt: now,
     });
 
-    const selectStmt = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?');
+    const selectStmt = db.prepare(
+      'SELECT id, email, created_at FROM users WHERE id = ?'
+    );
     const user = mapUser(selectStmt.get(info.lastInsertRowid));
     const token = signToken(user);
     res.status(201).json({ user, token });
   });
 
-  //логін користувача (перевірка email і пароля)
   app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body || {};
 
     if (typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Email та пароль є обовʼязковими.' });
+      return res
+        .status(400)
+        .json({ error: 'Email та пароль є обовʼязковими.' });
     }
 
     const trimmedEmail = email.trim().toLowerCase();
 
-    const selectStmt = db.prepare('SELECT id, email, password_hash, created_at FROM users WHERE email = ?');
+    const selectStmt = db.prepare(
+      'SELECT id, email, password_hash, created_at FROM users WHERE email = ?'
+    );
     const userRow = selectStmt.get(trimmedEmail);
     if (!userRow) {
       return res.status(401).json({ error: 'Невірний email або пароль.' });
@@ -203,7 +167,6 @@ function createApp(options = {}) {
     res.json({ user, token });
   });
 
-  //історія задач користувача
   app.get('/api/tasks', authenticate, (req, res) => {
     const stmt = db.prepare(`
       SELECT id, status, progress, complexity, filters, image_name, result_summary, error_message, created_at, updated_at
@@ -212,11 +175,10 @@ function createApp(options = {}) {
       ORDER BY created_at DESC
       LIMIT ?
     `);
-    const rows = stmt.all(req.user.id, maxTasksStored);
-    res.json({ tasks: rows.map(mapTask), serverId });
+    const rows = stmt.all(req.user.id, MAX_TASKS_STORED);
+    res.json({ tasks: rows.map(mapTask) });
   });
 
-  //створення нової задачі + черга задач + ліміт активних задач
   app.post('/api/tasks', authenticate, (req, res) => {
     const { filters, complexity, imageName } = req.body || {};
 
@@ -224,15 +186,35 @@ function createApp(options = {}) {
       return res.status(400).json({ error: 'Невірні дані задачі.' });
     }
 
-    const activeCountStmt = db.prepare(`
-      SELECT COUNT(*) as cnt FROM tasks WHERE status = 'running' AND user_id = ?
-    `);
-    const { cnt: activeCount } = activeCountStmt.get(req.user.id);
+    if (!Number.isFinite(complexity) || complexity < 0) {
+      return res.status(400).json({ error: 'Некоректна складність задачі.' });
+    }
 
-    const queueCountStmt = db.prepare(`
-      SELECT COUNT(*) as cnt FROM tasks WHERE status = 'queued' AND user_id = ?
-    `);
-    const { cnt: queuedCount } = queueCountStmt.get(req.user.id);
+    if (complexity > MAX_TASK_COMPLEXITY) {
+      return res.status(400).json({
+        error: `Складність задачі (${complexity}) перевищує максимальне значення ${MAX_TASK_COMPLEXITY}.`,
+      });
+    }
+
+    const activeCountStmt = db.prepare(
+      `SELECT COUNT(*) AS cnt FROM tasks WHERE user_id = ? AND status = 'running'`
+    );
+    const { cnt: activeCount } = activeCountStmt.get(req.user.id);
+    if (activeCount >= MAX_ACTIVE_TASKS) {
+      return res.status(429).json({
+        error: `Досягнуто ліміт активних задач (${MAX_ACTIVE_TASKS}). Дочекайтеся завершення поточних задач.`,
+      });
+    }
+
+    const totalCountStmt = db.prepare(
+      `SELECT COUNT(*) AS cnt FROM tasks WHERE user_id = ?`
+    );
+    const { cnt: totalCount } = totalCountStmt.get(req.user.id);
+    if (totalCount >= MAX_USER_TASKS) {
+      return res.status(429).json({
+        error: `Досягнуто ліміт збережених задач (${MAX_USER_TASKS}). Видаліть старі записи або зверніться до адміністратора.`,
+      });
+    }
 
     const now = new Date().toISOString();
     const insertStmt = db.prepare(`
@@ -240,20 +222,8 @@ function createApp(options = {}) {
       VALUES (@status, @progress, @complexity, @filters, @imageName, @resultSummary, @resultData, @errorMessage, @createdAt, @updatedAt, @userId)
     `);
 
-    let status = 'running';
-    let httpStatus = 201;
-    let queuePosition = 0;
-    let estimatedWaitSeconds = 0;
-
-    if (activeCount >= maxActiveTasks) {
-      status = 'queued';
-      httpStatus = 202;
-      queuePosition = queuedCount + 1;
-      estimatedWaitSeconds = Math.max(queuePosition * averageTaskSeconds, averageTaskSeconds);
-    }
-
     const info = insertStmt.run({
-      status,
+      status: 'running',
       progress: 0,
       complexity,
       filters: JSON.stringify(filters),
@@ -272,81 +242,49 @@ function createApp(options = {}) {
       WHERE id = ? AND user_id = ?
     `);
     const task = taskStmt.get(info.lastInsertRowid, req.user.id);
-    res.status(httpStatus).json({
-      task: mapTask(task),
-      queued: status === 'queued',
-      queuePosition,
-      estimatedWaitSeconds,
-      maxActiveTasks,
-      serverId,
-    });
+    res.status(201).json({ task: mapTask(task) });
   });
 
-  //оновлення статусу задачі
   app.patch('/api/tasks/:id', authenticate, (req, res) => {
     const id = Number(req.params.id);
     if (!id) {
-      return res.status(400).json({ error: 'Некоректний ідентифікатор задачі.' });
+      return res
+        .status(400)
+        .json({ error: 'Некоректний ідентифікатор задачі.' });
     }
 
     const { status, progress, resultSummary, errorMessage } = req.body || {};
 
-    const selectStmt = db.prepare(`
-      SELECT * FROM tasks WHERE id = ? AND user_id = ?
-    `);
+    const selectStmt = db.prepare(
+      `SELECT * FROM tasks WHERE id = ? AND user_id = ?`
+    );
     const existing = selectStmt.get(id, req.user.id);
     if (!existing) {
       return res.status(404).json({ error: 'Задачу не знайдено.' });
     }
 
     const nextStatus = status || existing.status;
-    const nextProgress = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : existing.progress;
-    const nextSummary = typeof resultSummary === 'string' ? resultSummary : existing.result_summary;
-    const nextError = typeof errorMessage === 'string' ? errorMessage : existing.error_message;
+    const nextProgress =
+      typeof progress === 'number'
+        ? Math.max(0, Math.min(100, progress))
+        : existing.progress;
+    const nextSummary =
+      typeof resultSummary === 'string'
+        ? resultSummary
+        : existing.result_summary;
+    const nextError =
+      typeof errorMessage === 'string'
+        ? errorMessage
+        : existing.error_message;
 
-    const allowedStatuses = new Set(['running', 'completed', 'cancelled', 'failed', 'pending', 'queued']);
+    const allowedStatuses = new Set([
+      'running',
+      'completed',
+      'cancelled',
+      'failed',
+    ]);
     if (!allowedStatuses.has(nextStatus)) {
       return res.status(400).json({ error: 'Некоректний статус задачі.' });
-    }
-
-  // логіка черги: якщо задача переходить у running зі статусу queued, перевіряємо ліміт
-    if (nextStatus === 'running' && existing.status === 'queued') {
-      const activeCountStmt = db.prepare(`
-        SELECT COUNT(*) as cnt FROM tasks WHERE status = 'running' AND user_id = ? AND id != ?
-      `);
-      const { cnt: activeCount } = activeCountStmt.get(req.user.id, existing.id);
-      if (activeCount >= maxActiveTasks) {
-        const queuedAheadStmt = db.prepare(`
-          SELECT COUNT(*) as cnt FROM tasks
-          WHERE user_id = ? AND status = 'queued' AND created_at < ?
-        `);
-        const { cnt: queuedAhead } = queuedAheadStmt.get(req.user.id, existing.created_at);
-        const queuePosition = queuedAhead + 1;
-        const estimatedWaitSeconds = Math.max(queuePosition * averageTaskSeconds, averageTaskSeconds);
-        return res.status(409).json({
-          error: 'Ще очікуєте у черзі. Спробуйте трохи пізніше.',
-          queuePosition,
-          estimatedWaitSeconds,
-          serverId,
-          task: mapTask(existing),
-        });
-      }
-      const queuedAheadStmt = db.prepare(`
-        SELECT COUNT(*) as cnt FROM tasks
-        WHERE user_id = ? AND status = 'queued' AND created_at < ?
-      `);
-      const { cnt: queuedAhead } = queuedAheadStmt.get(req.user.id, existing.created_at);
-      if (queuedAhead > 0) {
-        const queuePosition = queuedAhead + 1;
-        const estimatedWaitSeconds = Math.max(queuePosition * averageTaskSeconds, averageTaskSeconds);
-        return res.status(409).json({
-          error: 'Перед вами ще є задачі у черзі.',
-          queuePosition,
-          estimatedWaitSeconds,
-          serverId,
-          task: mapTask(existing),
-        });
-      }
     }
 
     const now = new Date().toISOString();
@@ -377,23 +315,25 @@ function createApp(options = {}) {
     `);
 
     const updated = findStmt.get(id, req.user.id);
-    res.json({ task: mapTask(updated), serverId });
+    res.json({ task: mapTask(updated) });
   });
 
-  //скасування задачі користувачем
   app.post('/api/tasks/:id/cancel', authenticate, (req, res) => {
     const id = Number(req.params.id);
     if (!id) {
-      return res.status(400).json({ error: 'Некоректний ідентифікатор задачі.' });
+      return res
+        .status(400)
+        .json({ error: 'Некоректний ідентифікатор задачі.' });
     }
 
-    const selectStmt = db.prepare(`SELECT * FROM tasks WHERE id = ? AND user_id = ?`);
+    const selectStmt = db.prepare(
+      `SELECT * FROM tasks WHERE id = ? AND user_id = ?`
+    );
     const existing = selectStmt.get(id, req.user.id);
     if (!existing) {
       return res.status(404).json({ error: 'Задачу не знайдено.' });
     }
 
-    // можна скасувати лише queued або running задачі
     if (existing.status === 'completed' || existing.status === 'cancelled') {
       return res.status(409).json({ error: 'Задача вже завершена.' });
     }
@@ -416,11 +356,12 @@ function createApp(options = {}) {
     `);
 
     const updated = findStmt.get(id, req.user.id);
-    res.json({ task: mapTask(updated), serverId });
+    res.json({ task: mapTask(updated) });
   });
 
+
   app.use((req, res) => {
-    res.status(404).json({ error: 'Маршрут не знайдено.', serverId });
+    res.status(404).json({ error: 'Маршрут не знайдено.' });
   });
 
   return app;

@@ -1,5 +1,4 @@
 import React from 'react';
-//інформування про хід виконання задачі
 function ProcessingPanel({
   maxComplexity,
   currentComplexity,
@@ -25,29 +24,36 @@ function ProcessingPanel({
         </p>
       </div>
       {errorMessage ? <div className="processing-error">{errorMessage}</div> : null}
+
       <div className="processing-actions">
         <button className="btn" type="button" onClick={onStart} disabled={disableStart}>
           Запустити обробку
         </button>
+
         <button className="btn btn-stop" type="button" onClick={onCancel} disabled={disableCancel}>
           Скасувати
         </button>
+
         <button className="btn btn-download" type="button" onClick={onDownload} disabled={disableDownload}>
           Завантажити результат
         </button>
+
       </div>
       <div className="processing-progress">
         <div className="processing-status">
           <span>Статус: {statusText}</span>
           <span>{progress}%</span>
         </div>
+
         <div className="processing-track">
           <div className="processing-bar" style={{ width: `${progress}%` }} />
         </div>
+
         <div className="processing-stage">{stageText}</div>
         <div className="processing-current-task">
           Активна задача: {activeTaskId ? `#${activeTaskId}` : '—'}
         </div>
+        
       </div>
     </div>
   );

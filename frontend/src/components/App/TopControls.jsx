@@ -25,12 +25,6 @@ function TopControls({
       <button className="btn" type="button" onClick={onClearImage} disabled={!hasImage}>
         DELETE
       </button>
-      <button className="btn" type="button" onClick={onBack} disabled={!canUndo}>
-        BACK
-      </button>
-      <button className="btn" type="button" onClick={onReset}>
-        RESET
-      </button>
     </div>
   );
 }
