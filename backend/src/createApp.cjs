@@ -65,7 +65,7 @@ function createApp(options = {}) {
   app.options('*', cors(corsOptions));
   app.use(bodyParser.json({ limit: '10mb' }));
 
-  // АВТООЧИЩЕННЯ ЗАСТАРІЛИХ ЗАДАЧ (скасовує queued і failed, якщо клієнт довго не заходив)
+  // автоочищення застарілих задач (скасовує queued і failed, якщо клієнт довго не заходив)
   function cleanupStaleTasks(userId) {
     if (!userId || !Number.isFinite(staleTaskTimeoutSeconds) || staleTaskTimeoutSeconds <= 0) {
       return;
@@ -216,7 +216,7 @@ function createApp(options = {}) {
     res.json({ tasks: rows.map(mapTask), serverId });
   });
 
-  //створення нової задачі + черга задач+ліміт активних задач
+  //створення нової задачі + черга задач + ліміт активних задач
   app.post('/api/tasks', authenticate, (req, res) => {
     const { filters, complexity, imageName } = req.body || {};
 

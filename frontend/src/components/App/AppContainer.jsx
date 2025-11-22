@@ -166,6 +166,30 @@ function AppContainer() {
       return url;
     });
   }, []);
+
+  const cleanupProcessedResult = useCallback(() => {
+    storeProcessedImageURL(null);
+    processedOptionsRef.current = null;
+    setQueuedTaskInfo(null);
+  }, [storeProcessedImageURL]);
+
+  const resetProcessing = useCallback(({
+    status = 'idle',
+    message = '',
+    error = '',
+    progress = 0,
+    cancelTask = false,
+  } = {}) => {
+    if (cancelTask) cancelActiveTaskOnServer();
+    cleanupProcessedResult();
+    clearProcessingTimer();
+    processingSessionRef.current += 1;
+    setProcessingStatus(status);
+    setProcessingProgress(progress);
+    setProcessingMessage(message);
+    setProcessingError(error);
+  }, [cancelActiveTaskOnServer, cleanupProcessedResult, clearProcessingTimer]);
+
   function runProcessingInterval({ sessionId, complexity }) {
     const estimatedDuration = Math.max(4000, complexity * 35); // мс
     const step = 5;
@@ -231,19 +255,13 @@ function AppContainer() {
     } finally {
       setAuthLoading(false);
     }
-    cleanupProcessedResult();
-    clearProcessingTimer();
-    processingSessionRef.current += 1;
-    setProcessingStatus('idle');
-    setProcessingProgress(0);
-    setProcessingMessage('');
-    setProcessingError('');
+    resetProcessing({ status: 'idle' });
     setTasks([]);
     setUploadedFileName('');
     setHistory([]);
     setUndoStack([]);
     persistAuth('', null);
-  }, [cancelActiveTaskOnServer, clearProcessingTimer, persistAuth]);
+  }, [cancelActiveTaskOnServer, persistAuth, resetProcessing]);
 
   const selectedOption=options[selectedOptionIndex]
   const currentComplexity = calculateTaskComplexity(options, initialOptionsRef.current);
@@ -256,12 +274,6 @@ function AppContainer() {
       return next;
     });
   };
-
-  const cleanupProcessedResult = useCallback(() => {
-    storeProcessedImageURL(null);
-    processedOptionsRef.current = null;
-    setQueuedTaskInfo(null);
-  }, [storeProcessedImageURL]);
 
   const pushUndoSnapshot = ({
     optionsSnapshot,
@@ -297,14 +309,7 @@ function AppContainer() {
     if (newVal === currentVal) return; 
 
     if (processingStatus !== 'idle') {
-      clearProcessingTimer();
-      cleanupProcessedResult();
-      cancelActiveTaskOnServer();
-      processingSessionRef.current += 1;
-      setProcessingStatus('idle');
-      setProcessingProgress(0);
-      setProcessingMessage('');
-      setProcessingError('');
+      resetProcessing({ status: 'idle', cancelTask: true });
     }
 
     const snapshot = deepCopyOptions(options);
@@ -356,13 +361,7 @@ async function handleImageUpload(e) {
   }
 
   await cancelActiveTaskOnServer();
-  cleanupProcessedResult();
-  clearProcessingTimer();
-  processingSessionRef.current += 1;
-  setProcessingStatus('idle');
-  setProcessingProgress(0);
-  setProcessingMessage('');
-  setProcessingError('');
+  resetProcessing({ status: 'idle' });
 
   revokeImageURL(imageURL);
 
@@ -385,13 +384,7 @@ async function clearImage(){
   }
   setUploadedFileName('');
   await cancelActiveTaskOnServer();
-  cleanupProcessedResult();
-  clearProcessingTimer();
-  processingSessionRef.current += 1;
-  setProcessingStatus('idle');
-  setProcessingProgress(0);
-  setProcessingMessage('');
-  setProcessingError('');
+  resetProcessing({ status: 'idle' });
 }
 
 //максимальна складність задачі
@@ -475,13 +468,7 @@ async function startProcessingTask(){
 
 async function cancelProcessingTask(){
   if (processingStatus !== 'running' && processingStatus !== 'queued') return;
-  clearProcessingTimer();
-  setProcessingStatus('cancelled');
-  setProcessingProgress(0);
-  setProcessingMessage('Обробку скасовано.');
-  setProcessingError('');
-  cleanupProcessedResult();
-  processingSessionRef.current += 1;
+  resetProcessing({ status: 'cancelled', message: 'Обробку скасовано.' });
   await cancelActiveTaskOnServer();
 }
 
@@ -573,13 +560,7 @@ function handleBack(){
   addHistoryEntry(entry);
 
   cancelActiveTaskOnServer();
-  cleanupProcessedResult();
-  clearProcessingTimer();
-  setProcessingStatus('idle');
-  setProcessingProgress(0);
-  setProcessingMessage('');
-  setProcessingError('');
-  processingSessionRef.current += 1;
+  resetProcessing({ status: 'idle' });
 }
 
 // ADDED: Reset to initial options
@@ -611,13 +592,7 @@ function handleReset(){
   addHistoryEntry(entry);
 
   cancelActiveTaskOnServer();
-  cleanupProcessedResult();
-  clearProcessingTimer();
-  setProcessingStatus('idle');
-  setProcessingProgress(0);
-  setProcessingMessage('');
-  setProcessingError('');
-  processingSessionRef.current += 1;
+  resetProcessing({ status: 'idle' });
 }
 
 useEffect(() => {
@@ -762,13 +737,7 @@ function handleHistoryRestore(entry){
   addHistoryEntry(restoreEntry);
 
   cancelActiveTaskOnServer();
-  cleanupProcessedResult();
-  clearProcessingTimer();
-  setProcessingStatus('idle');
-  setProcessingProgress(0);
-  setProcessingMessage('');
-  setProcessingError('');
-  processingSessionRef.current += 1;
+  resetProcessing({ status: 'idle' });
 }
 
 const processingStatusText = (() => {
