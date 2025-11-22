@@ -10,13 +10,11 @@
 
 - **Редактор фільтрів**: яскравість, контраст, насиченість, відтінки, сепія, ч/б, блюр. Для поточного параметра показується слайдер, а зміни фіксуються в історії.
 
-- **Історія змін**: панель відображає останні 10 кроків; доступні кнопки `BACK` (undo) і `RESET`.
+- **Історія змін**: панель відображає останні 10 кроків; доступні кнопки `BACK` і `RESET`.
 
 - **Обмеження складності** (`MAX_TASK_COMPLEXITY = 70`): перед створенням задачі фронтенд перевіряє сумарне відхилення фільтрів і блокує старт, якщо межа перевищена.
 
 - **Черга на бекенді**: одночасно може виконуватись обмежена кількість задач (`MAX_ACTIVE_TASKS`, за замовчуванням 5). Надлишок ставиться в статус `queued` із повідомленням про позицію та приблизний час очікування.
-
-- **Автоочищення**: задачі в стані `queued`/`running`, которыми не цікавився клієнт довше `STALE_TASK_TIMEOUT_SECONDS` (120 с), автоматично позначаються як `cancelled`/`failed`, щоб черга не зависала.
 
 - **Прогрес-бар** показує %, етап (`Очікує запуску → Підготовка зображення → Застосування фільтрів → Фіналізація обробки → Обробка завершена`) та актуальну задачу.
 
@@ -26,54 +24,67 @@
 
 ## Відповідність вимогам
 
-1. **Максимальна складність задачі.** Перевірка на клієнті: `frontend/src/components/App/AppContainer.jsx` (функція startProcessingTask, змінні MAX_TASK_COMPLEXITY, calculateTaskComplexity з frontend/src/config/filters.js і frontend/src/utils/filters.js). При перевищенні показує помилку і не звертається до сервера.
+1. **Максимальна складність задачі.**
+  (Перевірка на клієнті: `frontend/src/components/App/AppContainer.jsx` (функція startProcessingTask, змінні MAX_TASK_COMPLEXITY, calculateTaskComplexity з frontend/src/config/filters.js і frontend/src/utils/filters.js). При перевищенні показує помилку і не звертається до сервера.)
 
-2. **Інформування про хід виконання .** Клієнт: `AppContainer.jsx` (processingProgress, processingMessage, getProcessingStage, runProcessingInterval), UI в `frontend/src/components/App/ProcessingPanel.jsx`. Синхронізація статусів із бекендом через updateTask.
+2. **Інформування про хід виконання .**
+  (Клієнт: `AppContainer.jsx` (processingProgress, processingMessage, getProcessingStage, runProcessingInterval), UI в `frontend/src/components/App/ProcessingPanel.jsx`. Синхронізація статусів із бекендом через updateTask.)
 
-3. **Історія, стан, скасування, ліміт активних задач, зберігання в БД .** Бекенд: `backend/src/createApp.cjs` (черга, MAX_ACTIVE_TASKS, маршрути /api/tasks, /api/tasks/:id/cancel), дані в SQLite `backend/src/db.cjs`. Фронт: `AppContainer.jsx` (fetchTasks, cancelActiveTaskOnServer, TaskHistory).
+3. **Історія, стан, скасування, ліміт активних задач, зберігання в БД .**
+   (Бекенд: `backend/src/createApp.cjs` (черга, MAX_ACTIVE_TASKS, маршрути /api/tasks, /api/tasks/:id/cancel), дані в SQLite `backend/src/db.cjs`. Фронт: `AppContainer.jsx` (fetchTasks, cancelActiveTaskOnServer, TaskHistory).)
 
-4. **Авторизація по HTTPS.** Бекенд: `backend/src/load-balancer.cjs`/`backend/src/index.cjs `створюють HTTPS сервер із TLS, маршрути /api/auth/login|register з JWT у `backend/src/createApp.cjs`. Клієнт: `frontend/src/api/auth.js`, токен у localStorage.
+4. **Авторизація по HTTPS.**
+   (Бекенд: `backend/src/load-balancer.cjs`/`backend/src/index.cjs `створюють HTTPS сервер із TLS, маршрути /api/auth/login|register з JWT у `backend/src/createApp.cjs`. Клієнт: `frontend/src/api/auth.js`, токен у localStorage.)
 
-5. **Балансування навантаження.** Файл `backend/src/load-balancer.cjs` підіймає HTTPS LB на 4000 і розподіляє round-robin на HTTP application servers (порти з APP_SERVER_PORTS), перевірка через /health.
+5. **Балансування навантаження.**
+   (Файл `backend/src/load-balancer.cjs` підіймає HTTPS LB на 4000 і розподіляє round-robin на HTTP application servers (порти з APP_SERVER_PORTS), перевірка через /health.)
 
-6. **Черга та оцінка часу очікування .** Бекенд: `createApp.cjs` при перевищенні MAX_ACTIVE_TASKS повертає queued, queuePosition, estimatedWaitSeconds. Фронт: `AppContainer.jsx` обробляє queued, показує позицію й ETA.
+6. **Черга та оцінка часу очікування .**
+    (Бекенд: `createApp.cjs` при перевищенні MAX_ACTIVE_TASKS повертає queued, queuePosition, estimatedWaitSeconds. Фронт: `AppContainer.jsx` обробляє queued, показує позицію й ETA.)
 
 ---
 ## Схема
 ```
-┌────────────────────────────────┐
-│         Frontend (React)       │
-│  • Авторизація                 │
-│  • Редактор фільтрів           │
-│  • Історія та прогрес          │
-└───────────────-────────────────┘
-                │ HTTPS
-                │
-┌────────────────────────────────┐
-│        HTTPS Load Balancer     │
-│  • Приймає всі зовнішні запити │
-│  • Роздає їх round-robin       │
-│    між backend-серверами       │
-└───────────────-────────────────┘
-                │ HTTP
-                │
-┌────────────────────────────────┐
-│      Backend Application       │
-│    Servers (app-1, app-2…)     │
-│  • Express API                 │
-│  • JWT-auth middleware         │
-│  • Черга задач                 │
-│  • Автоочищення задач          │
-└───────────────-────────────────┘
-                │
-                │ SQLite 
-                │
-┌────────────────────────────────┐
-│         SQLite Database        │
-│        tasks.db + WAL          │
-│  • users                       │
-│  • tasks (queued, running…)    │
-└────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│                 Frontend (React)              │
+│  • Авторизація                                │
+│  • Редактор фільтрів                          │
+│  • Сторінка історії та прогресу задач         │
+│  • Всі запити → через HTTPS → Load Balancer   │
+└───────────────────────────────────────────────┘
+                     │
+                     │ HTTPS
+                     ▼
+┌───────────────────────────────────────────────┐
+│               HTTPS Load Balancer             │              
+│  • Приймає всі зовнішні запити                │
+│  • Розподіляє їх round-robin між              │
+│    backend-серверами                          │
+│  • Проксі: HTTPS → HTTP                       │
+└───────────────────────────────────────────────┘
+                     │
+                     │ HTTP
+                     ▼
+┌───────────────────────────────────────────────┐
+│         Backend Servers                       │
+│     (app-1, app-2)                            │
+│  • REST API                                   │
+│  • JWT-auth middleware                        │
+│  • Черга задач                                │
+│  • Оновлення статусу та прогресу              │
+│  • Автоочищення завершених/старих задач       │
+│  • Кожен сервер працює з однією спільною БД   │
+└───────────────────────────────────────────────┘
+                     │
+                     │ SQLite
+                     ▼
+┌───────────────────────────────────────────────┐
+│        SQLite Database (tasks.db)             │
+│  • Таблиця users                              │
+│  • Таблиця tasks (queued, running, done…)     │
+│  • Зберігання фільтрів, параметрів, статусів  │
+└───────────────────────────────────────────────┘
+
 ```
 ---
 ## Структура репозиторію
@@ -81,7 +92,7 @@
 ```
 .
 ├─ package.json            # Скрипти для воркспейсів
-├─ frontend/               # React + Vite клієнт
+├─ frontend/               
 │  ├─ package.json
 │  ├─ index.html
 │  └─ src/
@@ -132,16 +143,6 @@ openssl req -x509 -newkey rsa:2048 \
 # HTTPS load balancer + 2 application server-и
 npm run backend:start
 ```
-
-Корисні змінні:
-
-- `APP_SERVER_PORTS="5001,5002,5003"` — порти HTTP-воркерів (мінімум два).
-- `MAX_ACTIVE_TASKS=1` — ліміт одночасних задач на користувача (для демонстрації черги є готовий скрипт `npm run backend:start:max1`).
-- `JWT_SECRET`, `JWT_EXPIRES_IN` — налаштування токена.
-- `ALLOWED_ORIGINS` — whitelist для CORS.
-- `STALE_TASK_TIMEOUT_SECONDS` — тайм-аут автоочищення черги.
-- `CERT_PATH`, `KEY_PATH`, `PORT` — альтернативні шляхи/порт для LB.
-
 
 ### 3. Фронтенд
 
