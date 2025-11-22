@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 function AuthPanel({ onLogin, loading }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('login'); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

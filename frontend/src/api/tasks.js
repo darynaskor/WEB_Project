@@ -11,7 +11,6 @@ async function handleResponse(response) {
       }
       details = json;
     } catch {
-      // ignore parse errors
     }
     const error = new Error(message);
     error.status = response.status;

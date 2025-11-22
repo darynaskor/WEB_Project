@@ -8,7 +8,6 @@ export function buildFilterString(optionList) {
   return optionList.map(option => `${option.property}(${option.value}${option.unit})`).join(' ');
 }
 
-//максимальна складність задачі 4
 export function calculateTaskComplexity(currentOptions, baselineOptions = DEFAULT_OPTIONS) {
   return currentOptions.reduce((total, option, index) => {
     const baselineValue = baselineOptions[index]?.value ?? 0;

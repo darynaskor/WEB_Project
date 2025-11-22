@@ -463,7 +463,6 @@ function AppContainer() {
     refreshTasks();
   }, [isAuthenticated, refreshTasks, clearActiveTask]);
 
-  // --- Текст для UI ---
   const processingStatusText = (() => {
     switch (processingStatus) {
       case 'running':
@@ -481,7 +480,6 @@ function AppContainer() {
 
   const stageText = processingMessage || getProcessingStage(processingProgress);
 
-  // --- Рендер ---
   if (!isAuthenticated) {
     return (
       <>
