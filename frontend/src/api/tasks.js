@@ -1,61 +1,50 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
-
-async function handleResponse(response) {
-  if (!response.ok) {
-    let message = 'Сталася помилка під час запиту до сервера.';
-    let details = null;
-    try {
-      const json = await response.json();
-      if (json?.error) {
-        message = json.error;
-      }
-      details = json;
-    } catch {
-    }
-    const error = new Error(message);
-    error.status = response.status;
-    error.details = details;
-    throw error;
-  }
-  return response.json();
-}
-
-function buildHeaders(token, extra = {}) {
-  const headers = {
-    ...(extra || {}),
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 async function request(path, options = {}, token) {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const url = `${API_BASE}${path}`;
+
+  const headers = options.headers || {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
     ...options,
-    headers: buildHeaders(token, options.headers),
+    headers: headers
   });
-  return handleResponse(response);
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {}
+
+  if (!response.ok) {
+    const message = data && data.error 
+      ? data.error 
+      : 'Сталася помилка запиту.';
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+
+  return data;
 }
 
 export async function fetchTasks(token) {
   const data = await request('/tasks', {}, token);
-  return data.tasks ?? [];
+  return data.tasks || [];
 }
 
 export async function createTask(payload, token) {
-  const data = await request(
+  return request(
     '/tasks',
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     },
-    token,
+    token
   );
-  return data;
 }
 
 export async function updateTask(id, payload, token) {
@@ -63,12 +52,10 @@ export async function updateTask(id, payload, token) {
     `/tasks/${id}`,
     {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     },
-    token,
+    token
   );
   return data.task;
 }
@@ -76,10 +63,8 @@ export async function updateTask(id, payload, token) {
 export async function cancelTask(id, token) {
   const data = await request(
     `/tasks/${id}/cancel`,
-    {
-      method: 'POST',
-    },
-    token,
+    { method: 'POST' },
+    token
   );
   return data.task;
 }

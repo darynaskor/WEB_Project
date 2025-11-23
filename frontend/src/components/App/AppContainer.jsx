@@ -433,6 +433,7 @@ function AppContainer() {
     setProcessingMessage('Файл завантажено.');
     patchActiveTask({ resultSummary: 'Файл завантажено користувачем' });
   }
+  
   useEffect(() => {
     return () => {
       revokeImageURL(imageURL);

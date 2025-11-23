@@ -38,7 +38,7 @@ function createApp() {
   const MAX_TASKS_STORED = 100;                     
   const MAX_ACTIVE_TASKS = Number(process.env.MAX_ACTIVE_TASKS || 2);   
   const MAX_USER_TASKS = Number(process.env.MAX_USER_TASKS || 50);      
-  const MAX_TASK_COMPLEXITY = Number(process.env.MAX_TASK_COMPLEXITY || 100); 
+  const MAX_TASK_COMPLEXITY = Number(process.env.MAX_TASK_COMPLEXITY || 70); 
 
   const app = express();
 

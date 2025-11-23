@@ -28,6 +28,7 @@ function AuthPanel({ onLogin, loading }) {
       <p className="auth-panel__sub">
         Для керування задачами необхідно авторизуватися.
       </p>
+
       <form className="auth-panel__form" onSubmit={handleSubmit}>
         <label className="auth-panel__field">
           <span>Email</span>
@@ -56,10 +57,12 @@ function AuthPanel({ onLogin, loading }) {
           {loading ? 'Зачекайте…' : mode === 'login' ? 'Увійти' : 'Зареєструватися'}
         </button>
       </form>
+
       <div className="auth-panel__switch">
         {mode === 'login' ? (
           <>
             <span>Ще немає аккаунту?</span>
+
             <button type="button" onClick={() => { setMode('register'); setError(''); }} disabled={loading}>
               Зареєструватися
             </button>
@@ -67,6 +70,7 @@ function AuthPanel({ onLogin, loading }) {
         ) : (
           <>
             <span>Вже зареєстровані?</span>
+            
             <button type="button" onClick={() => { setMode('login'); setError(''); }} disabled={loading}>
               Увійти
             </button>

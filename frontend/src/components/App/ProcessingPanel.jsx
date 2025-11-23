@@ -4,7 +4,6 @@ function ProcessingPanel({
   currentComplexity,
   errorMessage,
   statusText,
-  status,
   progress,
   stageText,
   activeTaskId,
